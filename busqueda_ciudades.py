@@ -125,12 +125,14 @@ class BFS:
             self.solucion = self.nodoActual
             return
         self.solucion = self.algoritmoSimple()
-        self.Busqueda.coste = self.solucion.coste
+        if self.solucion is not None:
+            self.Busqueda.coste = self.solucion.coste
 
     def algoritmoSimple(self):
         while(True):
             if self.Busqueda.esVacia(self.frontera):
-                return None
+                print("[INFO] No se ha encontrado solución.\n")
+                return self.nodoActual
             self.nodoActual = self.borrarPrimero()
             if self.Busqueda.esFinal(self.nodoActual.estado):
                 return self.nodoActual
@@ -145,23 +147,6 @@ class BFS:
     def borrarPrimero(self):
         return self.frontera.pop(0)
 
-
-def reconstruirCamino(nodo):
-    ids = [nodo.estado.identificador]
-    while nodo.padre is not None:
-        nodo = nodo.padre
-        ids.append(nodo.estado.identificador)
-    print(f"Camino recorrido: {ids}")
-
-
-def imprimirResultado(tipo):
-    print(f"Nodos generados: {tipo.Busqueda.generados}")
-    print(f"Nodos expandidos: {tipo.Busqueda.expandidos}")
-    print(f"Nodos explorados: {tipo.Busqueda.explorados}")
-    print(f"Coste final: {tipo.Busqueda.coste}")
-    reconstruirCamino(tipo.solucion)
-
-
 class DFS:
     
     def __init__(self, busqueda):
@@ -174,12 +159,14 @@ class DFS:
             self.solucion = self.nodoActual
             return
         self.solucion = self.algoritmoSimple()
-        self.Busqueda.coste = self.solucion.coste
+        if self.solucion is not None:
+            self.Busqueda.coste = self.solucion.coste
 
     def algoritmoSimple(self):
         while(True):
             if self.Busqueda.esVacia(self.frontera):
-                return None
+                print("[INFO] No se ha encontrado solución.\n")
+                return self.nodoActual
             self.nodoActual = self.borrarUltimo()
             if self.Busqueda.esFinal(self.nodoActual.estado):
                 return self.nodoActual
@@ -194,19 +181,34 @@ class DFS:
             self.cerrados.add(self.nodoActual.estado)
             self.Busqueda.abrirNodo(self.nodoActual, self.frontera)
     
+def reconstruirCamino(nodo):
+    if nodo is None:
+        return
+    ids = [nodo.estado.identificador]
+    while nodo.padre is not None:
+        nodo = nodo.padre
+        ids.append(nodo.estado.identificador)
+    print(f"Camino recorrido: {ids}")
 
+
+def imprimirResultado(tipo):
+    print(f"Nodos generados: {tipo.Busqueda.generados}")
+    print(f"Nodos expandidos: {tipo.Busqueda.expandidos}")
+    print(f"Nodos explorados: {tipo.Busqueda.explorados}")
+    print(f"Coste final: {tipo.Busqueda.coste}")
+    reconstruirCamino(tipo.solucion)
 
 def toMetersPerSecond(kilometersPerHour):
     return (kilometersPerHour * 1000) / 3600
 
 def main():
-    prob = Problema("problems/small/avenida_de_espanÌa_250_1.json")
+    prob = Problema("problems/small/paseo_simoÌn_abril_250_0.json")
     busqueda = Busqueda(prob)
-    print("Empezamos con BFS: ")
+    print("Empezamos con BFS: \n")
     busquedaBFS = BFS(busqueda)
     imprimirResultado(busquedaBFS)
-
-    print("Empezamos con DFS: ")
+    print("\n------------------------")
+    print("\nEmpezamos con DFS: \n")
     busquedaDFS = DFS(busqueda)
     imprimirResultado(busquedaDFS)
 
