@@ -1,3 +1,4 @@
+import queue
 import json
 
 def loadData(fileName):
@@ -53,6 +54,7 @@ class Problema:
         self.estados = self.calcularEstados(data)
         # Lista de todas las acciones posibles
         self.acciones = self.calcularAcciones(data)
+        # Encontramos el estado final y el estado inicial en el diccionario de estados
         self.estadoFinal = self.estados[data['final']]
         self.estadoInicial = self.estados[data['initial']]
         
@@ -87,7 +89,10 @@ class Busqueda:
     
     def abrirNodo(self, nodo, frontera):
         self.expandidos += 1
-        conexiones = self.Problema.conexiones[nodo.estado.identificador]
+        if nodo.estado.identificador in self.Problema.conexiones:
+            conexiones = self.Problema.conexiones[nodo.estado.identificador]
+        else:
+            return
         for element in conexiones:
             accion = self.encontrarAccion(nodo.estado.identificador, element)
             nodoFrontera = Nodo(self.Problema.estados[element], nodo, accion)
@@ -108,7 +113,7 @@ class Busqueda:
         else:
             return True
         
-class BusquedaA:
+class BFS:
 
     def __init__(self, busqueda):
         self.Busqueda = busqueda
@@ -139,31 +144,71 @@ class BusquedaA:
     
     def borrarPrimero(self):
         return self.frontera.pop(0)
+
+
+def reconstruirCamino(nodo):
+    ids = [nodo.estado.identificador]
+    while nodo.padre is not None:
+        nodo = nodo.padre
+        ids.append(nodo.estado.identificador)
+    print(f"Camino recorrido: {ids}")
+
+
+def imprimirResultado(tipo):
+    print(f"Nodos generados: {tipo.Busqueda.generados}")
+    print(f"Nodos expandidos: {tipo.Busqueda.expandidos}")
+    print(f"Nodos explorados: {tipo.Busqueda.explorados}")
+    print(f"Coste final: {tipo.Busqueda.coste}")
+    reconstruirCamino(tipo.solucion)
+
+
+class DFS:
     
-    def reconstruirCamino(self, nodo):
-        ids = [nodo.estado.identificador]
-        while nodo.padre is not None:
-            nodo = nodo.padre
-            ids.append(nodo.estado.identificador)
-        print(f"Camino recorrido: {ids}")
+    def __init__(self, busqueda):
+        self.Busqueda = busqueda
+        self.frontera = []
+        self.cerrados = set()
+        self.nodoActual = Nodo(busqueda.Problema.estadoInicial, None, None)
+        self.Busqueda.abrirNodo(self.nodoActual, self.frontera)
+        if self.Busqueda.esFinal(self.nodoActual.estado):
+            self.solucion = self.nodoActual
+            return
+        self.solucion = self.algoritmoSimple()
+        self.Busqueda.coste = self.solucion.coste
 
+    def algoritmoSimple(self):
+        while(True):
+            if self.Busqueda.esVacia(self.frontera):
+                return None
+            self.nodoActual = self.borrarUltimo()
+            if self.Busqueda.esFinal(self.nodoActual.estado):
+                return self.nodoActual
+            self.Busqueda.explorados += 1
+            self.Explorar()
 
-    def imprimirResultado(self):
-        print(f"Nodos generados: {self.Busqueda.generados}")
-        print(f"Nodos expandidos: {self.Busqueda.expandidos}")
-        print(f"Nodos explorados: {self.Busqueda.explorados}")
-        print(f"Coste final: {self.Busqueda.coste}")
-        self.reconstruirCamino(self.nodoActual)
+    def borrarUltimo(self):
+        return self.frontera.pop(len(self.frontera) - 1)
+
+    def Explorar(self):
+        if self.nodoActual.estado not in self.cerrados:
+            self.cerrados.add(self.nodoActual.estado)
+            self.Busqueda.abrirNodo(self.nodoActual, self.frontera)
+    
 
 
 def toMetersPerSecond(kilometersPerHour):
     return (kilometersPerHour * 1000) / 3600
 
 def main():
-    prob = Problema("problems/small/avenida_de_espanÌa_250_0.json")
+    prob = Problema("problems/small/avenida_de_espanÌa_250_1.json")
     busqueda = Busqueda(prob)
-    busquedaArboles = BusquedaA(busqueda)
-    busquedaArboles.imprimirResultado()
+    print("Empezamos con BFS: ")
+    busquedaBFS = BFS(busqueda)
+    imprimirResultado(busquedaBFS)
+
+    print("Empezamos con DFS: ")
+    busquedaDFS = DFS(busqueda)
+    imprimirResultado(busquedaDFS)
 
 
 
