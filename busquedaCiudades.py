@@ -15,10 +15,6 @@ class Estado:
         self.longitud = long
         self.latitud = lat
 
-class HEstado:
-    def __init__(self, heur):
-        self.heuristica = heur
-
 class Accion:
 
     def __init__(self, orig, dest, dist, vel):
@@ -46,7 +42,7 @@ class Problema:
         if not self.data:
             return
         self.conexiones = {}
-        self.acciones = []
+        self.acciones = {}
         self.estados = {}        
         # Diccionario de conexiones, id origen con posibles destinos
         self.conexiones = self.calcularConexiones()  
@@ -67,9 +63,11 @@ class Problema:
         return conexiones
     
     def calcularAcciones(self):
-        acciones = []
+        acciones = {}
         for element in self.data['segments']:
-            acciones.append(Accion(element['origin'], element['destination'], element['distance'], element['speed']))
+            if element['origin'] not in acciones:
+                acciones[element['origin']] = []
+            acciones[element['origin']].append(Accion(element['origin'], element['destination'], element['distance'], element['speed']))
         return acciones
     
     def calcularEstados(self):
@@ -78,12 +76,6 @@ class Problema:
             estados[element['identifier']] = Estado(element['identifier'], element['longitude'], element['latitude'])
         return estados
     
-class HProblema(Problema):
-    def __init__(self):
-        self.heuristica = self.calcularHeuristica()
-        self.hestados = self.calcularHEstados()
-        self.hestadoFinal = HEstado(self.estadoFinal, 0)
-        self.hestadoInicial = HEstado(self.estadoInicial, self.funcionHeuristica(self.estadoInicial['longitude'], self.estadoInicial['latitude']))
 
 class Busqueda(Problema):
 
@@ -104,9 +96,9 @@ class Busqueda(Problema):
         if self.solucion is not None:
             self.coste = self.solucion.coste
 
-    def encontrarAccion(self, origen, destino):
-        for element in self.acciones:
-            if element.origen == origen and element.destino == destino:
+    def encontrarAccion(self, destino):
+        for element in self.acciones[self.nodoActual.estado.identificador]:
+            if element.destino == destino:
                 return element
         print("No se han podido encontrar acciones.")
         return None
@@ -125,7 +117,7 @@ class Busqueda(Problema):
             return
         conexiones.sort()
         for element in conexiones:
-            accion = self.encontrarAccion(self.nodoActual.estado.identificador, element)
+            accion = self.encontrarAccion(element)
             nodoFrontera = Nodo(self.estados[element], self.nodoActual, accion)
             self.frontera.append(nodoFrontera)
             self.generados += 1
@@ -155,8 +147,46 @@ class BFS(Busqueda):
         return self.frontera.pop(0)
     
 class DFS(Busqueda):
+
+    def abrirNodo(self):
+        self.expandidos += 1
+        if self.nodoActual.estado.identificador in self.conexiones:
+            conexiones = self.conexiones[self.nodoActual.estado.identificador]
+        else:
+            return
+        conexiones.sort()
+        frontera = []
+        for element in conexiones:
+            accion = self.encontrarAccion(element)
+            nodoFrontera = Nodo(self.estados[element], self.nodoActual, accion)
+            frontera.append(nodoFrontera)
+            self.generados += 1
+        self.frontera.extend(frontera)
+
     def sacarSiguiente(self):
         return self.frontera.pop(len(self.frontera) - 1)
+
+class Heuristica(Problema):
+    def __init__(self):
+        self.latitudFinal = self.estadoFinal.latitud
+        self.longitudFinal = self.estadoFinal.longitud
+        self.heuristica = self.calcularHeuristica()
+
+    def calcularHeuristica(self):
+        velocidadMax = 0
+        for element in self.data['segments']:
+            if element['speed'] > velocidadMax:
+                velocidadMax = element['speed']
+        return velocidadMax
+    
+    def funcionHeuristica(self, longitud, latitud):
+        return (abs(self.latitudFinal - latitud) + abs(self.longitudFinal - longitud)) / self.heuristica
+
+
+class PM(Busqueda):
+    def __init__(self, heuristica):
+        self.Heuristica = heuristica
+    
 
 def imprimirResultado(busqueda):
     print(f"Nodos generados: {busqueda.generados}")
@@ -172,6 +202,7 @@ def reconstruirCamino(nodo):
     while nodo.padre is not None:
         nodo = nodo.padre
         ids.append(nodo.estado.identificador)
+    ids.reverse()
     print(f"Camino recorrido: {ids}")
 
 def toMetersPerSecond(kilometersPerHour):
@@ -179,11 +210,11 @@ def toMetersPerSecond(kilometersPerHour):
 
 def main():
     print("Empezamos con BFS: \n")
-    anchura = BFS("problems/small/avenida_de_espanÌa_250_0.json")
+    anchura = BFS("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
     imprimirResultado(anchura)
     print("\n---------------------------\n")
     print("Seguimos con DFS: \n")
-    profundidad = DFS("problems/small/avenida_de_espanÌa_250_0.json")
+    profundidad = DFS("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
     imprimirResultado(profundidad)
 
 if __name__ == "__main__":
