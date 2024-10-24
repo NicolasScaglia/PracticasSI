@@ -1,4 +1,5 @@
 import json
+from queue import PriorityQueue
 
 def loadData(fileName):
     if not fileName.endswith(".json"):
@@ -34,6 +35,9 @@ class Nodo:
         else:
             self.profundidad = 0
             self.coste = 0
+
+    def __lt__(self, otro):
+        return self.estado.identificador < otro.estado.identificador
 
 class Problema:
     def __init__(self, problemName):
@@ -76,18 +80,36 @@ class Problema:
             estados[element['identifier']] = Estado(element['identifier'], element['longitude'], element['latitude'])
         return estados
     
+class Heuristica(Problema):
+    def __init__(self, problemName):
+        super().__init__(problemName)
+        self.latitudFinal = self.estadoFinal.latitud
+        self.longitudFinal = self.estadoFinal.longitud
+        self.heuristica = self.calcularHeuristica()
 
-class Busqueda(Problema):
+    def calcularHeuristica(self):
+        velocidadMax = 0
+        for element in self.data['segments']:
+            if element['speed'] > velocidadMax:
+                velocidadMax = element['speed']
+        return velocidadMax
+    
+    def funcionHeuristica(self, longitud, latitud):
+        return (abs(self.latitudFinal - latitud) + abs(self.longitudFinal - longitud)) / self.heuristica
+
+class Busqueda(Heuristica):
+
+    frontera = []
+    cerrados = set()
+    nodoActual = Nodo(None, None, None)
+    generados = 0
+    expandidos = 0
+    explorados = 0
+    coste = 0
 
     def __init__(self, problemName):
         super().__init__(problemName)
-        self.frontera = []
-        self.cerrados = set()
         self.nodoActual = Nodo(self.estadoInicial, None, None)
-        self.generados = 0
-        self.expandidos = 0
-        self.explorados = 0
-        self.coste = 0
         self.abrirNodo()
         if self.esFinal():
             self.solucion = self.nodoActual
@@ -148,6 +170,15 @@ class BFS(Busqueda):
     
 class DFS(Busqueda):
 
+    def sacarSiguiente(self):
+        return self.frontera.pop(len(self.frontera) - 1)
+
+
+
+class PM(Busqueda):
+
+    frontera = PriorityQueue() 
+
     def abrirNodo(self):
         self.expandidos += 1
         if self.nodoActual.estado.identificador in self.conexiones:
@@ -155,37 +186,14 @@ class DFS(Busqueda):
         else:
             return
         conexiones.sort()
-        frontera = []
         for element in conexiones:
             accion = self.encontrarAccion(element)
             nodoFrontera = Nodo(self.estados[element], self.nodoActual, accion)
-            frontera.append(nodoFrontera)
+            self.frontera.put((self.funcionHeuristica(nodoFrontera.estado.longitud, nodoFrontera.estado.latitud), nodoFrontera))
             self.generados += 1
-        self.frontera.extend(frontera)
-
-    def sacarSiguiente(self):
-        return self.frontera.pop(len(self.frontera) - 1)
-
-class Heuristica(Problema):
-    def __init__(self):
-        self.latitudFinal = self.estadoFinal.latitud
-        self.longitudFinal = self.estadoFinal.longitud
-        self.heuristica = self.calcularHeuristica()
-
-    def calcularHeuristica(self):
-        velocidadMax = 0
-        for element in self.data['segments']:
-            if element['speed'] > velocidadMax:
-                velocidadMax = element['speed']
-        return velocidadMax
     
-    def funcionHeuristica(self, longitud, latitud):
-        return (abs(self.latitudFinal - latitud) + abs(self.longitudFinal - longitud)) / self.heuristica
-
-
-class PM(Busqueda):
-    def __init__(self, heuristica):
-        self.Heuristica = heuristica
+    def sacarSiguiente(self):
+        return self.frontera.get()[1]
     
 
 def imprimirResultado(busqueda):
@@ -216,6 +224,11 @@ def main():
     print("Seguimos con DFS: \n")
     profundidad = DFS("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
     imprimirResultado(profundidad)
+    print("\n---------------------------\n")
+    heur = Heuristica("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json") 
+    primeroMejor = PM("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
+    print("Continuamos con PM: ")
+    imprimirResultado(primeroMejor)
 
 if __name__ == "__main__":
     main()
