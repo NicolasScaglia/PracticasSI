@@ -1,5 +1,7 @@
 import json
 from queue import PriorityQueue
+import datetime
+from geopy import distance
 
 def loadData(fileName):
     if not fileName.endswith(".json"):
@@ -83,8 +85,7 @@ class Problema:
 class Heuristica(Problema):
     def __init__(self, problemName):
         super().__init__(problemName)
-        self.latitudFinal = self.estadoFinal.latitud
-        self.longitudFinal = self.estadoFinal.longitud
+        self.posicionFinal = (self.estadoFinal.latitud, self.estadoFinal.longitud)
         self.heuristica = self.calcularHeuristica()
 
     def calcularHeuristica(self):
@@ -92,10 +93,11 @@ class Heuristica(Problema):
         for element in self.data['segments']:
             if element['speed'] > velocidadMax:
                 velocidadMax = element['speed']
-        return velocidadMax
+        return toMetersPerSecond(velocidadMax)
     
     def funcionHeuristica(self, longitud, latitud):
-        return (abs(self.latitudFinal - latitud) + abs(self.longitudFinal - longitud)) / self.heuristica
+        posicionActual = (latitud, longitud)
+        return distance.distance(self.posicionFinal, posicionActual).m / self.heuristica
 
 class Busqueda(Heuristica):
 
@@ -132,12 +134,11 @@ class Busqueda(Heuristica):
         return not self.frontera
     
     def abrirNodo(self):
-        self.expandidos += 1
         if self.nodoActual.estado.identificador in self.conexiones:
             conexiones = self.conexiones[self.nodoActual.estado.identificador]
         else:
             return
-        conexiones.sort()
+        self.expandidos += 1
         for element in conexiones:
             accion = self.encontrarAccion(element)
             nodoFrontera = Nodo(self.estados[element], self.nodoActual, accion)
@@ -195,12 +196,34 @@ class PM(Busqueda):
     def sacarSiguiente(self):
         return self.frontera.get()[1]
     
+class AE(Busqueda):
+
+    frontera = PriorityQueue() 
+
+    def abrirNodo(self):
+        self.expandidos += 1
+        if self.nodoActual.estado.identificador in self.conexiones:
+            conexiones = self.conexiones[self.nodoActual.estado.identificador]
+        else:
+            return
+        conexiones.sort()
+        for element in conexiones:
+            accion = self.encontrarAccion(element)
+            nodoFrontera = Nodo(self.estados[element], self.nodoActual, accion)
+            # Calculamos el valor f (coste + heurística)
+            f = nodoFrontera.coste + self.funcionHeuristica(nodoFrontera.estado.longitud, nodoFrontera.estado.latitud)
+            self.frontera.put((f, nodoFrontera))
+            self.generados += 1
+
+    def sacarSiguiente(self):
+        return self.frontera.get()[1]
 
 def imprimirResultado(busqueda):
     print(f"Nodos generados: {busqueda.generados}")
     print(f"Nodos expandidos: {busqueda.expandidos}")
     print(f"Nodos explorados: {busqueda.explorados}")
-    print(f"Coste final: {busqueda.coste}")
+    coste = datetime.timedelta(seconds=busqueda.coste)
+    print(f"Coste final: {coste}")
     reconstruirCamino(busqueda.solucion)
 
 def reconstruirCamino(nodo):
@@ -218,17 +241,20 @@ def toMetersPerSecond(kilometersPerHour):
 
 def main():
     print("Empezamos con BFS: \n")
-    anchura = BFS("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
+    anchura = BFS("examples_with_solutions/problems/huge/calle_agustina_aroca_albacete_5000_0.json")
     imprimirResultado(anchura)
     print("\n---------------------------\n")
     print("Seguimos con DFS: \n")
-    profundidad = DFS("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
+    profundidad = DFS("examples_with_solutions/problems/huge/calle_agustina_aroca_albacete_5000_0.json")
     imprimirResultado(profundidad)
     print("\n---------------------------\n")
-    heur = Heuristica("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json") 
-    primeroMejor = PM("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
     print("Continuamos con PM: ")
+    primeroMejor = PM("examples_with_solutions/problems/huge/calle_agustina_aroca_albacete_5000_0.json")
     imprimirResultado(primeroMejor)
+    print("\n---------------------------\n")
+    print("Finalizamos con A*: ")
+    aestrella = AE("examples_with_solutions/problems/huge/calle_agustina_aroca_albacete_5000_0.json")
+    imprimirResultado(aestrella)
 
 if __name__ == "__main__":
     main()
