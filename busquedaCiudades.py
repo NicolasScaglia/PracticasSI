@@ -2,8 +2,10 @@ import json
 from queue import PriorityQueue
 import datetime
 from geopy import distance
+from timeit import default_timer as timer
+from abc import ABC, abstractmethod
 
-def loadData(fileName):
+def load_data(fileName):
     if not fileName.endswith(".json"):
         print("El archivo no es válido.")
         return
@@ -42,186 +44,212 @@ class Nodo:
         return self.estado.identificador < otro.estado.identificador
 
 class Problema:
+
     def __init__(self, problemName):
         self.problemName = problemName
-        self.data = loadData(self.problemName)
+        self.data = load_data(self.problemName)
         if not self.data:
+            print("[ERROR] No se ha encontrado la información del problema.")
             return
         self.conexiones = {}
         self.acciones = {}
-        self.estados = {}        
+        self.estados = {}
+        self.maxVelocidad = 0 
+        self.velocidadMedia = 0       
         # Diccionario de conexiones, id origen con posibles destinos
-        self.conexiones = self.calcularConexiones()  
+        self.conexiones = self.calcular_conexiones()  
         # Diccionario de estados, id del estado, estado en el otro lado
-        self.estados = self.calcularEstados()
-        # Lista de todas las acciones posibles
-        self.acciones = self.calcularAcciones()
+        self.estados = self.calcular_estados()
+        # Diccionario de acciones, id del origen, lista de acciones destino
+        self.acciones = self.calcular_acciones()
         # Encontramos el estado final y el estado inicial en el diccionario de estados
         self.estadoFinal = self.estados[self.data['final']]
         self.estadoInicial = self.estados[self.data['initial']]
     
-    def calcularConexiones(self):
+    def calcular_conexiones(self):
         conexiones = {}
         for element in self.data['segments']:
             if element['origin'] not in conexiones:
-                conexiones[element['origin']] = []
-            conexiones[element['origin']].append(element['destination'])
+                conexiones[element['origin']] = PriorityQueue()
+            conexiones[element['origin']].put(element['destination'])
         return conexiones
     
-    def calcularAcciones(self):
+    def calcular_acciones(self):
         acciones = {}
+        cuenta = 0
         for element in self.data['segments']:
             if element['origin'] not in acciones:
                 acciones[element['origin']] = []
             acciones[element['origin']].append(Accion(element['origin'], element['destination'], element['distance'], element['speed']))
+            if element['speed'] > self.maxVelocidad:
+                self.maxVelocidad = element['speed']
+            self.velocidadMedia += element['speed']
+            cuenta += 1
         return acciones
     
-    def calcularEstados(self):
+    def calcular_estados(self):
         estados = {}
         for element in self.data['intersections']:
             estados[element['identifier']] = Estado(element['identifier'], element['longitude'], element['latitude'])
         return estados
     
-class Heuristica(Problema):
-    def __init__(self, problemName):
-        super().__init__(problemName)
-        self.posicionFinal = (self.estadoFinal.latitud, self.estadoFinal.longitud)
-        self.heuristica = self.calcularHeuristica()
-
-    def calcularHeuristica(self):
-        velocidadMax = 0
-        for element in self.data['segments']:
-            if element['speed'] > velocidadMax:
-                velocidadMax = element['speed']
-        return toMetersPerSecond(velocidadMax)
+class Heuristica():
+    def __init__(self, valor):
+        self.heuristica = valor
     
-    def funcionHeuristica(self, longitud, latitud):
-        posicionActual = (latitud, longitud)
-        return distance.distance(self.posicionFinal, posicionActual).m / self.heuristica
+    def funcion_heuristica(self, posicionActual, posicionFinal):
+        return distance.distance(posicionFinal, posicionActual).m / self.heuristica
 
-class Busqueda(Heuristica):
+class Busqueda(ABC):
 
-    frontera = []
-    cerrados = set()
-    nodoActual = Nodo(None, None, None)
     generados = 0
     expandidos = 0
     explorados = 0
     coste = 0
+    
+    def __init__(self, problema, frontera):
+        self.problema = problema
+        self.frontera = frontera
 
-    def __init__(self, problemName):
-        super().__init__(problemName)
-        self.nodoActual = Nodo(self.estadoInicial, None, None)
-        self.abrirNodo()
-        if self.esFinal():
-            self.solucion = self.nodoActual
-            return
-        self.solucion = self.Algoritmo()
+    def start(self):
+        start = timer() 
+        self.solucion = self.algoritmo()
         if self.solucion is not None:
             self.coste = self.solucion.coste
+        end = timer()
+        self.tiempoEjecucion = end - start
 
-    def encontrarAccion(self, destino):
-        for element in self.acciones[self.nodoActual.estado.identificador]:
+    def algoritmo(self):
+        self.cerrados = set()
+        nodoInicial = Nodo(self.problema.estadoInicial, None, None)
+        self.insertar(nodoInicial)
+        while(True):
+            if self.es_vacia():
+                print("[INFO] No se ha encontrado solución\n")
+                return self.nodoActual
+            self.nodoActual = self.sacar_siguiente()
+            if self.es_final():
+                self.explorados += 1
+                return self.nodoActual
+            self.explorados += 1
+            if self.nodoActual.estado not in self.cerrados:
+                self.cerrados.add(self.nodoActual.estado)
+                self.abrir_nodo()
+
+    @abstractmethod
+    def insertar(self, nodo):
+        pass
+    
+    def es_vacia(self):
+        return not self.frontera
+    
+    @abstractmethod
+    def sacar_siguiente(self):
+        pass    
+
+    def es_final(self):
+        return self.nodoActual.estado == self.problema.estadoFinal
+
+    def abrir_nodo(self):
+        self.expandidos += 1
+        if self.nodoActual.estado.identificador in self.problema.conexiones:
+            conexiones = self.problema.conexiones[self.nodoActual.estado.identificador]
+        else:
+            return
+        while not conexiones.empty():
+            element = conexiones.get()
+            self.expandir(element)  
+
+    def expandir(self, element):
+            accion = self.encontrar_accion(element)
+            nodoFrontera = Nodo(self.problema.estados[element], self.nodoActual, accion)
+            self.insertar(nodoFrontera)
+            self.generados += 1
+
+    def encontrar_accion(self, destino):
+        for element in self.problema.acciones[self.nodoActual.estado.identificador]:
             if element.destino == destino:
                 return element
         print("No se han podido encontrar acciones.")
         return None
 
-    def esFinal(self):
-        return self.nodoActual.estado == self.estadoFinal
-    
-    def esVacia(self):
-        return not self.frontera
-    
-    def abrirNodo(self):
-        if self.nodoActual.estado.identificador in self.conexiones:
-            conexiones = self.conexiones[self.nodoActual.estado.identificador]
-        else:
-            return
-        self.expandidos += 1
-        for element in conexiones:
-            accion = self.encontrarAccion(element)
-            nodoFrontera = Nodo(self.estados[element], self.nodoActual, accion)
-            self.frontera.append(nodoFrontera)
-            self.generados += 1
-
-    def Algoritmo(self):
-        while(True):
-            if self.esVacia():
-                print("[INFO] No se ha encontrado solución\n")
-                return self.nodoActual
-            self.nodoActual = self.sacarSiguiente()
-            if self.esFinal():
-                return self.nodoActual
-            self.explorados += 1
-            self.Explorar()
-    
-    def Explorar(self):
-        if self.nodoActual.estado not in self.cerrados:
-            self.cerrados.add(self.nodoActual.estado)
-            self.abrirNodo()
-    
-    def sacarSiguiente(self):
-        NotImplemented
     
 class BFS(Busqueda):
 
-    def sacarSiguiente(self):
+    def __init__(self, problema):
+        frontera = []
+        super().__init__(problema, frontera)
+
+    def insertar(self, nodo):
+        self.frontera.append(nodo)
+
+    def sacar_siguiente(self):
         return self.frontera.pop(0)
     
 class DFS(Busqueda):
 
-    def sacarSiguiente(self):
+    def __init__(self, problema):
+        frontera = []
+        super().__init__(problema, frontera)
+
+    def insertar(self, nodo):
+        self.frontera.append(nodo)
+
+    def sacar_siguiente(self):
         return self.frontera.pop(len(self.frontera) - 1)
 
 
 
 class PM(Busqueda):
 
-    frontera = PriorityQueue() 
+    def __init__(self, problema, heuristica):
+        frontera = PriorityQueue()
+        super().__init__(problema, frontera)
+        self.heuristica = heuristica
 
-    def abrirNodo(self):
+    def abrir_nodo(self):
         self.expandidos += 1
         if self.nodoActual.estado.identificador in self.conexiones:
             conexiones = self.conexiones[self.nodoActual.estado.identificador]
         else:
             return
-        conexiones.sort()
-        for element in conexiones:
-            accion = self.encontrarAccion(element)
-            nodoFrontera = Nodo(self.estados[element], self.nodoActual, accion)
-            self.frontera.put((self.funcionHeuristica(nodoFrontera.estado.longitud, nodoFrontera.estado.latitud), nodoFrontera))
-            self.generados += 1
+        
     
-    def sacarSiguiente(self):
+    def sacar_siguiente(self):
         return self.frontera.get()[1]
     
 class AE(Busqueda):
 
-    frontera = PriorityQueue() 
+    def __init__(self, problema, heuristica):
+        frontera = PriorityQueue()
+        super().__init__(problema, frontera)
+        self.heuristica = heuristica
 
-    def abrirNodo(self):
+
+    def abrir_nodo(self):
         self.expandidos += 1
         if self.nodoActual.estado.identificador in self.conexiones:
             conexiones = self.conexiones[self.nodoActual.estado.identificador]
         else:
             return
-        conexiones.sort()
-        for element in conexiones:
-            accion = self.encontrarAccion(element)
+        while not conexiones.empty():
+            element = conexiones.get()
+            accion = self.encontrar_accion(element)
             nodoFrontera = Nodo(self.estados[element], self.nodoActual, accion)
             # Calculamos el valor f (coste + heurística)
             f = nodoFrontera.coste + self.funcionHeuristica(nodoFrontera.estado.longitud, nodoFrontera.estado.latitud)
             self.frontera.put((f, nodoFrontera))
             self.generados += 1
 
-    def sacarSiguiente(self):
+    def sacar_siguiente(self):
         return self.frontera.get()[1]
 
 def imprimirResultado(busqueda):
     print(f"Nodos generados: {busqueda.generados}")
     print(f"Nodos expandidos: {busqueda.expandidos}")
     print(f"Nodos explorados: {busqueda.explorados}")
+    tiempo = datetime.timedelta(seconds=busqueda.tiempoEjecucion)
+    print(f"Duración de la ejecución: {tiempo}")
     coste = datetime.timedelta(seconds=busqueda.coste)
     print(f"Coste final: {coste}")
     reconstruirCamino(busqueda.solucion)
@@ -234,18 +262,22 @@ def reconstruirCamino(nodo):
         nodo = nodo.padre
         ids.append(nodo.estado.identificador)
     ids.reverse()
+    print(f"Longitud de la solucion: {len(ids)}")
     print(f"Camino recorrido: {ids}")
 
 def toMetersPerSecond(kilometersPerHour):
     return (kilometersPerHour * 1000) / 3600
 
 def main():
+    prob = Problema("examples_with_solutions/problems/huge/calle_agustina_aroca_albacete_5000_0.json")
     print("Empezamos con BFS: \n")
-    anchura = BFS("examples_with_solutions/problems/huge/calle_agustina_aroca_albacete_5000_0.json")
+    anchura = BFS(prob)
+    anchura.start()
     imprimirResultado(anchura)
     print("\n---------------------------\n")
     print("Seguimos con DFS: \n")
-    profundidad = DFS("examples_with_solutions/problems/huge/calle_agustina_aroca_albacete_5000_0.json")
+    profundidad = DFS(prob)
+    profundidad.start()
     imprimirResultado(profundidad)
     print("\n---------------------------\n")
     print("Continuamos con PM: ")
