@@ -64,19 +64,28 @@ class Problema:
     
     # Diccionario de acciones para calcular las conexiones entre intersecciones
     def calcular_acciones(self):
+        acciones = {}
         self.acciones = {}
         self.velocaidad_media = 0
         self.velocidad_maxima = 0
         cuenta = 0
         for element in self.data['segments']:
-            if element['origin'] not in self.acciones:
-                self.acciones[element['origin']] = PriorityQueue()
-            self.acciones[element['origin']].put((element['destination'],Accion(element['origin'], element['destination'], element['distance'], element['speed'])))
+            if element['origin'] not in acciones:
+                acciones[element['origin']] = PriorityQueue()
+                self.acciones[element['origin']] = []
+            acciones[element['origin']].put((element['destination'],Accion(element['origin'], element['destination'], element['distance'], element['speed'])))
             if element['speed'] > self.velocidad_maxima:
                 self.velocidad_maxima = element['speed']
             self.velocaidad_media += element['speed']
             cuenta += 1
         self.velocaidad_media /= cuenta
+
+        for element in self.data['segments']:
+            if element['origin'] in acciones:
+                while not acciones[element['origin']].empty():
+                    self.acciones[element['origin']].append(acciones[element['origin']].get()[1])
+        
+                    
 
     # Diccionario de estados, id del estado, estado en el otro lado
     def calcular_estados(self):
@@ -109,7 +118,7 @@ class Busqueda(ABC):
             self.coste = self.solucion.coste
         end = timer()
         self.tiempoEjecucion = end - start
-        self.problema.calcular_acciones()
+        #self.problema.calcular_acciones()
         
     def algoritmo(self):
         self.cerrados = set()
@@ -148,8 +157,8 @@ class Busqueda(ABC):
             acciones = self.problema.acciones[self.nodoActual.estado.identificador]
         else:
             return
-        while not acciones.empty():
-            accion = acciones.get()[1]
+        for element in acciones:
+            accion = element
             nodoFrontera = Nodo(self.problema.estados[accion.destino], self.nodoActual, accion)
             self.insertar(nodoFrontera)
             self.generados += 1
