@@ -1,0 +1,6 @@
+Generated nodes: 7
+Expanded nodes: 3
+Execution time: 0:00:00.001183
+Solution length: 2
+Solution cost: 0:00:13.094880
+Solution: [430308836 → 320314951 (3.3872399999999994), 320314951 → 772970911 (9.70764)]

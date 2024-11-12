@@ -1,0 +1,6 @@
+Generated nodes: 1
+Expanded nodes: 2
+Execution time: 0:00:00
+Solution length: 0
+Solution cost: 0:00:00
+Solution: []
