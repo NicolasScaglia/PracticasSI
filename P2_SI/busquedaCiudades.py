@@ -4,6 +4,7 @@ import datetime
 from geopy import distance
 from timeit import default_timer as timer
 from abc import ABC, abstractmethod
+import random
 
 
 def load_data(fileName):
@@ -55,38 +56,29 @@ class Problema:
         if not self.data:
             print("[ERROR] No se ha encontrado la información del problema.")
             return
-        # Encontramos el estado final y el estado inicial en el diccionario de estados
+        self.numero_estaciones = self.data['number_stations']
+        self.candidatos = self.data['candidates']
         self.calcular_acciones()
         self.calcular_estados()
-        self.estadoFinal = self.estados[self.data['final']]
-        self.estadoInicial = self.estados[self.data['initial']]
-        self.posicionFinal = (self.estadoFinal.latitud, self.estadoFinal.longitud)
+
+    def set_estado_final(self, estado):
+        self.estado_final = estado
+    def set_estado_inicial(self, estado):
+        self.estado_inicial = estado
     
     # Diccionario de acciones para calcular las conexiones entre intersecciones
     def calcular_acciones(self):
-        acciones = {}
         self.acciones = {}
         self.velocaidad_media = 0
         self.velocidad_maxima = 0
         cuenta = 0
+        self.data['segments'].sort(key = lambda a : a['destination'])
         for element in self.data['segments']:
-            if element['origin'] not in acciones:
-                acciones[element['origin']] = PriorityQueue()
+            if element['origin'] not in self.acciones:
                 self.acciones[element['origin']] = []
-            acciones[element['origin']].put((element['destination'],Accion(element['origin'], element['destination'], element['distance'], element['speed'])))
-            if element['speed'] > self.velocidad_maxima:
-                self.velocidad_maxima = element['speed']
-            self.velocaidad_media += element['speed']
-            cuenta += 1
+            self.acciones[element['origin']].append(Accion(element['origin'], element['destination'], element['distance'], element['speed']))
         self.velocaidad_media /= cuenta
-
-        for element in self.data['segments']:
-            if element['origin'] in acciones:
-                while not acciones[element['origin']].empty():
-                    self.acciones[element['origin']].append(acciones[element['origin']].get()[1])
         
-                    
-
     # Diccionario de estados, id del estado, estado en el otro lado
     def calcular_estados(self):
         self.estados = {}
@@ -118,11 +110,11 @@ class Busqueda(ABC):
             self.coste = self.solucion.coste
         end = timer()
         self.tiempoEjecucion = end - start
-        #self.problema.calcular_acciones()
+        self.problema.calcular_acciones()
         
     def algoritmo(self):
         self.cerrados = set()
-        nodoInicial = Nodo(self.problema.estadoInicial, None, None)
+        nodoInicial = Nodo(self.problema.inicial, None, None)
         self.insertar(nodoInicial)
         while(True):
             if self.es_vacia():
@@ -149,7 +141,7 @@ class Busqueda(ABC):
         pass    
 
     def es_final(self):
-        return self.nodoActual.estado == self.problema.estadoFinal
+        NotImplemented
 
     def abrir_nodo(self):
         self.expandidos += 1
@@ -163,41 +155,27 @@ class Busqueda(ABC):
             self.insertar(nodoFrontera)
             self.generados += 1
 
-    
-class BFS(Busqueda):
 
-    def __init__(self, problema):
-        frontera = []
-        super().__init__(problema, frontera)
+def evaluacion(solucion, problema):
+    sumPop = 0
+    min = -112
+    for element in problema.candidatos:
+        for i in range(0, len(solucion) - 1):
+            if solucion == 1:
+                problema.set_estado_inicial(element[0])
+                problema.set_estado_final(problema.candidatos[i][0])
+                estrella = AE(problema, Heuristica())
+                estrella.start()
+                if estrella.solucion.coste * element[1] < min or min < 0:
+                    min = estrella.solucion.coste * element[1]
+        sumPop += element[1]
+    return (1/sumPop) * min
 
-    def insertar(self, nodo):
-        self.frontera.append(nodo)
+            
 
-    def sacar_siguiente(self):
-        return self.frontera.pop(0)
-    
-class DFS(Busqueda):
 
-    def __init__(self, problema):
-        frontera = []
-        super().__init__(problema, frontera)
 
-    def insertar(self, nodo):
-        self.frontera.append(nodo)
 
-    def sacar_siguiente(self):
-        return self.frontera.pop(len(self.frontera) - 1)
-
-class PM(Busqueda):
-
-    def __init__(self, problema, heuristica):
-        frontera = PriorityQueue()
-        super().__init__(problema, frontera)
-        self.heuristica = heuristica
-
-    def sacar_siguiente(self):
-        return self.frontera.get()[1]
-    
 class AE(Busqueda):
 
     def __init__(self, problema, heuristica):
@@ -205,29 +183,32 @@ class AE(Busqueda):
         super().__init__(problema, frontera)
         self.heuristica = heuristica
 
+    def insertar(self, nodo):
+        self.frontera.put(())
+
     def sacar_siguiente(self):
         return self.frontera.get()[1]
 
-def imprimirResultado(busqueda):
-    print(f"Nodos generados: {busqueda.generados}")
-    print(f"Nodos expandidos: {busqueda.expandidos}")
-    print(f"Nodos explorados: {busqueda.explorados}")
-    tiempo = datetime.timedelta(seconds=busqueda.tiempoEjecucion)
-    print(f"Duración de la ejecución: {tiempo}")
-    coste = datetime.timedelta(seconds=busqueda.coste)
-    print(f"Coste final: {coste}")
-    reconstruirCamino(busqueda.solucion)
+# def imprimirResultado(busqueda):
+#     print(f"Nodos generados: {busqueda.generados}")
+#     print(f"Nodos expandidos: {busqueda.expandidos}")
+#     print(f"Nodos explorados: {busqueda.explorados}")
+#     tiempo = datetime.timedelta(seconds=busqueda.tiempoEjecucion)
+#     print(f"Duración de la ejecución: {tiempo}")
+#     coste = datetime.timedelta(seconds=busqueda.coste)
+#     print(f"Coste final: {coste}")
+#     reconstruirCamino(busqueda.solucion)
 
-def reconstruirCamino(nodo):
-    if nodo is None:
-        return
-    ids = [nodo.estado.identificador]
-    while nodo.padre is not None:
-        nodo = nodo.padre
-        ids.append(nodo.estado.identificador)
-    ids.reverse()
-    print(f"Longitud de la solucion: {len(ids)}")
-    print(f"Camino recorrido: {ids}")
+# def reconstruirCamino(nodo):
+#     if nodo is None:
+#         return
+#     ids = [nodo.estado.identificador]
+#     while nodo.padre is not None:
+#         nodo = nodo.padre
+#         ids.append(nodo.estado.identificador)
+#     ids.reverse()
+#     print(f"Longitud de la solucion: {len(ids)}")
+#     print(f"Camino recorrido: {ids}")
 
 def toMetersPerSecond(kilometersPerHour):
     return (kilometersPerHour * 1000) / 3600
@@ -235,28 +216,9 @@ def toMetersPerSecond(kilometersPerHour):
 def main():
     prob = Problema("examples_with_solutions/problems/huge/calle_agustina_aroca_albacete_5000_0.json")
     heur = Heuristica(prob.velocidad_maxima)
-    print("Empezamos con BFS: \n")
-    anchura = BFS(prob)
-    anchura.start()
-    imprimirResultado(anchura)
-    #prob = Problema("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
-    print("\n---------------------------\n")
-    print("Seguimos con DFS: \n")
-    profundidad = DFS(prob)
-    profundidad.start()
-    imprimirResultado(profundidad)
-    #prob = Problema("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
-    print("\n---------------------------\n")
-    print("Continuamos con PM: ")
-    primeroMejor = PM(prob, heur)
-    primeroMejor.start()
-    imprimirResultado(primeroMejor)
-    #prob = Problema("examples_with_solutions/problems/small/calle_del_virrey_morcillo_albacete_250_3.json")
-    print("\n---------------------------\n")
-    print("Finalizamos con A*: ")
+    print("A*: ")
     aestrella = AE(prob, heur)
     aestrella.start()
-    imprimirResultado(aestrella)
 
 if __name__ == "__main__":
     main()
