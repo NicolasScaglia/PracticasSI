@@ -56,7 +56,7 @@ class Problema:
         if not self.data:
             print("[ERROR] No se ha encontrado la información del problema.")
             return
-        self.numero_estaciones = self.data['number_stations']
+        self.num_estaciones = self.data['number_stations']
         self.candidatos = self.data['candidates']
         self.calcular_acciones()
         self.calcular_estados()
@@ -69,15 +69,15 @@ class Problema:
     # Diccionario de acciones para calcular las conexiones entre intersecciones
     def calcular_acciones(self):
         self.acciones = {}
-        self.velocaidad_media = 0
+        # self.velocaidad_media = 0
         self.velocidad_maxima = 0
-        cuenta = 0
+        # cuenta = 0
         self.data['segments'].sort(key = lambda a : a['destination'])
         for element in self.data['segments']:
             if element['origin'] not in self.acciones:
                 self.acciones[element['origin']] = []
             self.acciones[element['origin']].append(Accion(element['origin'], element['destination'], element['distance'], element['speed']))
-        self.velocaidad_media /= cuenta
+        # self.velocaidad_media /= cuenta
         
     # Diccionario de estados, id del estado, estado en el otro lado
     def calcular_estados(self):
@@ -141,7 +141,7 @@ class Busqueda(ABC):
         pass    
 
     def es_final(self):
-        NotImplemented
+        return self.nodoActual.estado.identificador == self.problema.estado_final
 
     def abrir_nodo(self):
         self.expandidos += 1
@@ -164,7 +164,7 @@ def evaluacion(solucion, problema):
             if solucion == 1:
                 problema.set_estado_inicial(element[0])
                 problema.set_estado_final(problema.candidatos[i][0])
-                estrella = AE(problema, Heuristica())
+                estrella = AE(problema, Heuristica(problema.velocidad_maxima))
                 estrella.start()
                 if estrella.solucion.coste * element[1] < min or min < 0:
                     min = estrella.solucion.coste * element[1]
@@ -176,7 +176,7 @@ class Individuo():
 
     # Cadena genética representa la solución del individuo.
     # Tamaño representa el tamaño de la cadena genética.
-    # Todo individuo tiene un valor de fitness, o lo que es lo mismo
+    # Todo individuo tiene un valor de fitness, o lo que es lo mismo,
     # un valor de aptitud.
     def __init__(self, cadena_genetica=None, tamano=1, seleccionados=1):
         if cadena_genetica is None:
@@ -216,6 +216,9 @@ class Individuo():
             if self.cadena_genetica[pos] != 1:
                 self.cadena_genetica[pos] = 1
 
+    def __eq__(self, otro):
+        return self.cadena_genetica.__eq__(otro.cadena_genetica)
+
 class AlgoritmoAleatorio():
 
 
@@ -226,41 +229,56 @@ class AlgoritmoAleatorio():
         self.tamano_poblacion = tamano_poblacion
 
         # Utilizamos una caché para que si ya tenemos un resultado, no volver
-        # a realizar una evaluación innecesaria. Key = toString(cadena_genética),
+        # a realizar una evaluación innecesaria. Key = cadena_genetica ,
         # Value = fitness 
+        # TODO buscar mejor clave para la caché.
         self.cache = {}
     
     def algoritmo(self):
-
-        # Inicializamos el mejor individuo a nulo.
         mejor_individuo = None
+        contadorOptimoLocal = 0
 
-        # Hacemos un bucle que dure el tamaño de la población.
-        for i in range(self.tamano_poblacion):
+        while not (contadorOptimoLocal >= 3):
+            # Inicializamos el mejor individuo local a nulo en cada iteración.
+            mejor_individuo_local = None
 
-            # Generamos el individuo en el momento en vez de guardarlo en un array, así
-            # ahorramos memoria.
-            temp = Individuo(tamano=len(self.problema.candidatos), seleccionados=self.problema.num_estaciones)
+            # Hacemos un bucle que dure el tamaño de la población.
+            for i in range(self.tamano_poblacion):
 
-            # Variable fitness temporal.
-            fitness = 0
+                # Generamos el individuo en el momento en vez de guardarlo en un array, así
+                # ahorramos memoria.
+                temp = Individuo(tamano=len(self.problema.candidatos), seleccionados=self.problema.num_estaciones)
 
-            # Acceso a la caché (simplifica la lectura del código).
-            acceso = self.cache[temp.cadena_genetica.__str__()]
+                # Variable fitness temporal.
+                fitness = 0
 
-            # Si existe valor en caché, usamos ese y no evaluamos de nuevo.
-            if acceso != None:
-                fitness = acceso
-            else:
-                # Si no, fitness será el valor de la evaluación y la guardamos en caché.
-                fitness = temp.evaluar(self.problema)
-                self.cache[temp.cadena_genetica.__str__()] = fitness
+                # Acceso a la caché (simplifica la lectura del código).
+                acceso = "".join(map(str, temp.cadena_genetica))
 
-            # Actualizamos el mejor valor.
-            if mejor_individuo.fitness < fitness or mejor_individuo is None:
-                mejor_individuo = temp
-            
-            # Devolvemos el mejor individuo.
+                # Si existe valor en caché, usamos ese y no evaluamos de nuevo.
+                if acceso in self.cache and self.cache[acceso] is not None:
+                    fitness = self.cache[acceso]
+                else:
+                    # Si no, fitness será el valor de la evaluación y la guardamos en caché.
+                    temp.evaluar(self.problema)
+                    fitness = temp.fitness
+                    self.cache[acceso] = fitness
+
+                # Actualizamos el mejor valor.
+                if mejor_individuo_local is None:
+                    mejor_individuo_local = temp
+                
+                if mejor_individuo_local.fitness < fitness:
+                    mejor_individuo_local = temp
+                
+                # Devolvemos el mejor individuo.
+            if mejor_individuo is None:
+                mejor_individuo = mejor_individuo_local
+            elif mejor_individuo_local.fitness > mejor_individuo.fitness:
+                mejor_individuo = mejor_individuo_local
+            elif mejor_individuo_local.__eq__(mejor_individuo):
+                contadorOptimoLocal += 1
+
         return mejor_individuo
 
 
@@ -300,15 +318,21 @@ class AE(Busqueda):
 #     print(f"Longitud de la solucion: {len(ids)}")
 #     print(f"Camino recorrido: {ids}")
 
+def imprimir_solucion(solucion, candidatos):
+    aux = []
+    for i in range(len(solucion) - 1):
+        if solucion[i] == 1:
+            aux.insert(0, candidatos[i][0])
+    print(aux)
+
 def toMetersPerSecond(kilometersPerHour):
     return (kilometersPerHour * 1000) / 3600
 
 def main():
-    prob = Problema("examples_with_solutions/problems/huge/calle_agustina_aroca_albacete_5000_0.json")
-    heur = Heuristica(prob.velocidad_maxima)
-    print("A*: ")
-    aestrella = AE(prob, heur)
-    aestrella.start()
+    prob = Problema("M:\\University\\PracticasSI\\P2_SI\\sample-problems-lab2\\toy\\calle_del_virrey_morcillo_albacete_250_3_candidates_15_ns_4.json")
+    AA = AlgoritmoAleatorio(prob, 100)
+    solucionAA = AA.algoritmo()
+    imprimir_solucion(solucionAA.cadena_genetica, prob.candidatos)
 
 if __name__ == "__main__":
     main()
