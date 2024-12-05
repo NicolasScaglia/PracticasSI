@@ -172,6 +172,96 @@ def evaluacion(solucion, problema):
     return (1/sumPop) * min
 
             
+class Individuo():
+
+    # Cadena genética representa la solución del individuo.
+    # Tamaño representa el tamaño de la cadena genética.
+    # Todo individuo tiene un valor de fitness, o lo que es lo mismo
+    # un valor de aptitud.
+    def __init__(self, cadena_genetica=None, tamano=1, seleccionados=1):
+        if cadena_genetica is None:
+            # Si no se pasa una cadena genética en concreto, usamos el resto de parámetros
+            # siempre y cuando sean válidos para generar una.
+            if tamano < 1 or seleccionados < 1:
+                return
+            self.seleccionados = seleccionados
+            self.tamano = tamano
+            # Inicializamos la cadena genética sin ninguna selección.
+            self.cadena_genetica = [0] * tamano
+            # La función generar hace una selección aleatoria de @seleccionados elementos.
+            self.generar()
+        else:
+            # Si pasan una cadena genética, obtenemos los parámetros de ésta.
+            self.cadena_genetica = cadena_genetica
+            self.tamano = len(self.cadena_genetica)
+            self.seleccionados = self.cadena_genetica.count(1)
+
+        self.fitness = 0
+
+    def evaluar(self, problema):
+        # Evaluamos al individuo usando la función de evaluación
+        self.fitness = evaluacion(self.cadena_genetica, problema)
+
+    def cruzar(self, otro, probabilidad=1.0):
+        pass
+
+    def mutar(self, probabilidad=1.0):
+        pass
+    
+    def generar(self):
+        # Mientras que no haya el número de 1s (seleccionados) igual a
+        # el número de seleccionados que necesitamos, continuamos.
+        while self.cadena_genetica.count(1) != self.seleccionados:
+            pos = random.randint(0, len(self.cadena_genetica) - 1)
+            if self.cadena_genetica[pos] != 1:
+                self.cadena_genetica[pos] = 1
+
+class AlgoritmoAleatorio():
+
+
+    # Se debe pasar el problema en concreto y el tamaño de la población
+    # al algoritmo.
+    def __init__(self, problema, tamano_poblacion = 100):
+        self.problema = problema
+        self.tamano_poblacion = tamano_poblacion
+
+        # Utilizamos una caché para que si ya tenemos un resultado, no volver
+        # a realizar una evaluación innecesaria. Key = toString(cadena_genética),
+        # Value = fitness 
+        self.cache = {}
+    
+    def algoritmo(self):
+
+        # Inicializamos el mejor individuo a nulo.
+        mejor_individuo = None
+
+        # Hacemos un bucle que dure el tamaño de la población.
+        for i in range(self.tamano_poblacion):
+
+            # Generamos el individuo en el momento en vez de guardarlo en un array, así
+            # ahorramos memoria.
+            temp = Individuo(tamano=len(self.problema.candidatos), seleccionados=self.problema.num_estaciones)
+
+            # Variable fitness temporal.
+            fitness = 0
+
+            # Acceso a la caché (simplifica la lectura del código).
+            acceso = self.cache[temp.cadena_genetica.__str__()]
+
+            # Si existe valor en caché, usamos ese y no evaluamos de nuevo.
+            if acceso != None:
+                fitness = acceso
+            else:
+                # Si no, fitness será el valor de la evaluación y la guardamos en caché.
+                fitness = temp.evaluar(self.problema)
+                self.cache[temp.cadena_genetica.__str__()] = fitness
+
+            # Actualizamos el mejor valor.
+            if mejor_individuo.fitness < fitness or mejor_individuo is None:
+                mejor_individuo = temp
+            
+            # Devolvemos el mejor individuo.
+        return mejor_individuo
 
 
 
