@@ -156,20 +156,23 @@ class Busqueda(ABC):
             self.generados += 1
 
 
-def evaluacion(solucion, problema):
-    sumPop = 0
-    min = -112
-    for element in problema.candidatos:
-        for i in range(0, len(solucion) - 1):
-            if solucion == 1:
-                problema.set_estado_inicial(element[0])
-                problema.set_estado_final(problema.candidatos[i][0])
-                estrella = AE(problema, Heuristica(problema.velocidad_maxima))
-                estrella.start()
-                if estrella.solucion.coste * element[1] < min or min < 0:
-                    min = estrella.solucion.coste * element[1]
-        sumPop += element[1]
-    return (1/sumPop) * min
+def limitar_seleccionados(cadena, seleccionados):
+    if cadena.count(1) == seleccionados:
+        return cadena;
+    elif cadena.count(1) > seleccionados:
+        indices = [i for i, bit in enumerate(cadena) if bit == 1]
+        exceso = len(indices) - seleccionados
+        cambios = random.sample(indices, exceso)
+        for i in cambios:
+            cadena[i] = 0
+        return cadena
+    else:
+        indices = [i for i, bit in enumerate(cadena) if bit == 0]
+        faltantes = seleccionados - cadena.count(1)
+        cambios = random.sample(indices, faltantes)
+        for i in cambios:
+            cadena[i] = 1
+        return cadena
 
             
 class Individuo():
@@ -200,24 +203,47 @@ class Individuo():
 
     def evaluar(self, problema):
         # Evaluamos al individuo usando la función de evaluación
-        self.fitness = evaluacion(self.cadena_genetica, problema)
+        sumPop = 0
+        min = -112
+        for element in problema.candidatos:
+            for i in range(0, len(self.cadena_genetica) - 1):
+                if self.cadena_genetica == 1:
+                    problema.set_estado_inicial(element[0])
+                    problema.set_estado_final(problema.candidatos[i][0])
+                    estrella = AE(problema, Heuristica(problema.velocidad_maxima))
+                    estrella.start()
+                    if estrella.solucion.coste * element[1] < min or min < 0:
+                        min = estrella.solucion.coste * element[1]
+            sumPop += element[1]
+        self.fitness = (1/sumPop) * min
 
-    def cruzar(self, otro, probabilidad=1.0):
-        pass
+    # Función mutable
+    def cruzar(self, otro, seleccionados=1):
 
-    def mutar(self, probabilidad=1.0):
-        pass
+        cruce = random.randint(1, len(self.cadenaG) - 1)
+
+        hijo1 = otro.cadena_genetica[cruce:] + self.cadena_genetica[:cruce]
+        hijo2 = self.cadena_genetica[cruce:] + otro.cadena_genetica[:cruce]
+
+        hijo1 = limitar_seleccionados(hijo1, seleccionados)
+        hijo2 = limitar_seleccionados(hijo2, seleccionados)
+
+        return hijo1, hijo2
+
+    def mutar(self, seleccionados=1):
+        
+
     
     def generar(self):
         # Mientras que no haya el número de 1s (seleccionados) igual a
         # el número de seleccionados que necesitamos, continuamos.
         while self.cadena_genetica.count(1) != self.seleccionados:
             pos = random.randint(0, len(self.cadena_genetica) - 1)
-            if self.cadena_genetica[pos] != 1:
-                self.cadena_genetica[pos] = 1
+            self.cadena_genetica[pos] = 1
 
     def __eq__(self, otro):
         return self.cadena_genetica.__eq__(otro.cadena_genetica)
+
 
 class AlgoritmoAleatorio():
 
@@ -238,7 +264,10 @@ class AlgoritmoAleatorio():
         mejor_individuo = None
         contadorOptimoLocal = 0
 
+        # Comprobamos que hayamos alcanzado al menos un óptimo local
+        # (las últimas tres soluciones sean iguales)
         while not (contadorOptimoLocal >= 3):
+
             # Inicializamos el mejor individuo local a nulo en cada iteración.
             mejor_individuo_local = None
 
@@ -319,8 +348,9 @@ class AE(Busqueda):
 #     print(f"Camino recorrido: {ids}")
 
 def imprimir_solucion(solucion, candidatos):
+
     aux = []
-    for i in range(len(solucion) - 1):
+    for i in range(len(solucion)):
         if solucion[i] == 1:
             aux.insert(0, candidatos[i][0])
     print(aux)
