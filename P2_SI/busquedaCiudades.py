@@ -206,8 +206,8 @@ class Individuo():
         sumPop = 0
         min = -112
         for element in problema.candidatos:
-            for i in range(0, len(self.cadena_genetica) - 1):
-                if self.cadena_genetica == 1:
+            for i in range(0, len(self.cadena_genetica)):
+                if self.cadena_genetica[i] == 1:
                     problema.set_estado_inicial(element[0])
                     problema.set_estado_final(problema.candidatos[i][0])
                     estrella = AE(problema, Heuristica(problema.velocidad_maxima))
@@ -231,7 +231,7 @@ class Individuo():
         return hijo1, hijo2
 
     def mutar(self, seleccionados=1):
-        
+        pass
 
     
     def generar(self):
