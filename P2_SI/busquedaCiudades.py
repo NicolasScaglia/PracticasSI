@@ -77,6 +77,8 @@ class Problema:
             if element['origin'] not in self.acciones:
                 self.acciones[element['origin']] = []
             self.acciones[element['origin']].append(Accion(element['origin'], element['destination'], element['distance'], element['speed']))
+            if element['speed'] > self.velocidad_maxima:
+                self.velocidad_maxima = element['speed']
         # self.velocaidad_media /= cuenta
         
     # Diccionario de estados, id del estado, estado en el otro lado
@@ -110,11 +112,11 @@ class Busqueda(ABC):
             self.coste = self.solucion.coste
         end = timer()
         self.tiempoEjecucion = end - start
-        self.problema.calcular_acciones()
+        #self.problema.calcular_acciones()
         
     def algoritmo(self):
         self.cerrados = set()
-        nodoInicial = Nodo(self.problema.inicial, None, None)
+        nodoInicial = Nodo(self.problema.estado_inicial, None, None)
         self.insertar(nodoInicial)
         while(True):
             if self.es_vacia():
@@ -134,14 +136,14 @@ class Busqueda(ABC):
         pass
     
     def es_vacia(self):
-        return not self.frontera
+        return not self.frontera.empty()
     
     @abstractmethod
     def sacar_siguiente(self):
         pass    
 
     def es_final(self):
-        return self.nodoActual.estado.identificador == self.problema.estado_final
+        return self.nodoActual.estado == self.problema.estado_final
 
     def abrir_nodo(self):
         self.expandidos += 1
@@ -155,6 +157,20 @@ class Busqueda(ABC):
             self.insertar(nodoFrontera)
             self.generados += 1
 
+class AE(Busqueda):
+
+    def __init__(self, problema, heuristica):
+        frontera = PriorityQueue()
+        super().__init__(problema, frontera)
+        self.heuristica = heuristica
+
+    def insertar(self, nodo):
+        posicion_actual = (nodo.estado.latitud, nodo.estado.longitud)
+        prioridad = self.heuristica.funcion_heuristica(posicion_actual, (self.problema.estado_final.latitud, self.problema.estado_final.longitud)) + nodo.coste
+        self.frontera.put((prioridad, nodo))
+        
+    def sacar_siguiente(self):
+        return self.frontera.get()[1]
 
 def limitar_seleccionados(cadena, seleccionados):
     if cadena.count(1) == seleccionados:
@@ -173,7 +189,6 @@ def limitar_seleccionados(cadena, seleccionados):
         for i in cambios:
             cadena[i] = 1
         return cadena
-
             
 class Individuo():
 
@@ -208,8 +223,8 @@ class Individuo():
         for element in problema.candidatos:
             for i in range(0, len(self.cadena_genetica)):
                 if self.cadena_genetica[i] == 1:
-                    problema.set_estado_inicial(element[0])
-                    problema.set_estado_final(problema.candidatos[i][0])
+                    problema.set_estado_inicial(problema.estados[element[0]])
+                    problema.set_estado_final(problema.estados[problema.candidatos[i][0]])
                     estrella = AE(problema, Heuristica(problema.velocidad_maxima))
                     estrella.start()
                     if estrella.solucion.coste * element[1] < min or min < 0:
@@ -266,65 +281,49 @@ class AlgoritmoAleatorio():
 
         # Comprobamos que hayamos alcanzado al menos un óptimo local
         # (las últimas tres soluciones sean iguales)
-        while not (contadorOptimoLocal >= 3):
 
-            # Inicializamos el mejor individuo local a nulo en cada iteración.
-            mejor_individuo_local = None
+        # Inicializamos el mejor individuo local a nulo en cada iteración.
+        mejor_individuo_local = None
 
-            # Hacemos un bucle que dure el tamaño de la población.
-            for i in range(self.tamano_poblacion):
+        # Hacemos un bucle que dure el tamaño de la población.
+        for i in range(self.tamano_poblacion):
 
-                # Generamos el individuo en el momento en vez de guardarlo en un array, así
-                # ahorramos memoria.
-                temp = Individuo(tamano=len(self.problema.candidatos), seleccionados=self.problema.num_estaciones)
+            # Generamos el individuo en el momento en vez de guardarlo en un array, así
+            # ahorramos memoria.
+            temp = Individuo(tamano=len(self.problema.candidatos), seleccionados=self.problema.num_estaciones)
 
-                # Variable fitness temporal.
-                fitness = 0
+            # Variable fitness temporal.
+            fitness = 0
 
-                # Acceso a la caché (simplifica la lectura del código).
-                acceso = "".join(map(str, temp.cadena_genetica))
+            # Acceso a la caché (simplifica la lectura del código).
+            acceso = "".join(map(str, temp.cadena_genetica))
 
-                # Si existe valor en caché, usamos ese y no evaluamos de nuevo.
-                if acceso in self.cache and self.cache[acceso] is not None:
-                    fitness = self.cache[acceso]
-                else:
-                    # Si no, fitness será el valor de la evaluación y la guardamos en caché.
-                    temp.evaluar(self.problema)
-                    fitness = temp.fitness
-                    self.cache[acceso] = fitness
+            # Si existe valor en caché, usamos ese y no evaluamos de nuevo.
+            if acceso in self.cache and self.cache[acceso] is not None:
+                fitness = self.cache[acceso]
+            else:
+                # Si no, fitness será el valor de la evaluación y la guardamos en caché.
+                temp.evaluar(self.problema)
+                fitness = temp.fitness
+                self.cache[acceso] = fitness
 
-                # Actualizamos el mejor valor.
-                if mejor_individuo_local is None:
-                    mejor_individuo_local = temp
+            # Actualizamos el mejor valor.
+            if mejor_individuo_local is None:
+                mejor_individuo_local = temp
+            
+            if mejor_individuo_local.fitness < fitness:
+                mejor_individuo_local = temp
                 
-                if mejor_individuo_local.fitness < fitness:
-                    mejor_individuo_local = temp
-                
-                # Devolvemos el mejor individuo.
-            if mejor_individuo is None:
-                mejor_individuo = mejor_individuo_local
-            elif mejor_individuo_local.fitness > mejor_individuo.fitness:
-                mejor_individuo = mejor_individuo_local
-            elif mejor_individuo_local.__eq__(mejor_individuo):
-                contadorOptimoLocal += 1
+            #     # Devolvemos el mejor individuo.
+            # if mejor_individuo is None:
+            #     mejor_individuo = mejor_individuo_local
+            # elif mejor_individuo_local.fitness > mejor_individuo.fitness:
+            #     mejor_individuo = mejor_individuo_local
+            # elif mejor_individuo_local.__eq__(mejor_individuo):
+            #     contadorOptimoLocal += 1
 
-        return mejor_individuo
+        return mejor_individuo_local
 
-
-
-
-class AE(Busqueda):
-
-    def __init__(self, problema, heuristica):
-        frontera = PriorityQueue()
-        super().__init__(problema, frontera)
-        self.heuristica = heuristica
-
-    def insertar(self, nodo):
-        self.frontera.put(())
-
-    def sacar_siguiente(self):
-        return self.frontera.get()[1]
 
 # def imprimirResultado(busqueda):
 #     print(f"Nodos generados: {busqueda.generados}")
@@ -336,16 +335,16 @@ class AE(Busqueda):
 #     print(f"Coste final: {coste}")
 #     reconstruirCamino(busqueda.solucion)
 
-# def reconstruirCamino(nodo):
-#     if nodo is None:
-#         return
-#     ids = [nodo.estado.identificador]
-#     while nodo.padre is not None:
-#         nodo = nodo.padre
-#         ids.append(nodo.estado.identificador)
-#     ids.reverse()
-#     print(f"Longitud de la solucion: {len(ids)}")
-#     print(f"Camino recorrido: {ids}")
+# # def reconstruirCamino(nodo):
+# #     if nodo is None:
+# #         return
+# #     ids = [nodo.estado.identificador]
+# #     while nodo.padre is not None:
+# #         nodo = nodo.padre
+# #         ids.append(nodo.estado.identificador)
+# #     ids.reverse()
+# #     print(f"Longitud de la solucion: {len(ids)}")
+# #     print(f"Camino recorrido: {ids}")
 
 def imprimir_solucion(solucion, candidatos):
 
@@ -366,4 +365,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
