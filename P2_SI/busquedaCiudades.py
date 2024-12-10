@@ -120,7 +120,7 @@ class Busqueda(ABC):
         self.insertar(nodoInicial)
         while(True):
             if self.es_vacia():
-                print("[INFO] No se ha encontrado solución\n")
+                self.nodoActual.coste = 10000000000000
                 return self.nodoActual
             self.nodoActual = self.sacar_siguiente()
             if self.es_final():
@@ -136,7 +136,7 @@ class Busqueda(ABC):
         pass
     
     def es_vacia(self):
-        return not self.frontera.empty()
+        return self.frontera.empty()
     
     @abstractmethod
     def sacar_siguiente(self):
