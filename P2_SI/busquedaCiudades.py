@@ -120,7 +120,7 @@ class Busqueda(ABC):
         self.insertar(nodoInicial)
         while(True):
             if self.es_vacia():
-                self.nodoActual.coste = 10000000000000
+                self.nodoActual.coste = float('inf')
                 return self.nodoActual
             self.nodoActual = self.sacar_siguiente()
             if self.es_final():
