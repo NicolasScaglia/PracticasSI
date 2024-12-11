@@ -233,22 +233,29 @@ class Individuo():
         self.fitness = (1/sumPop) * min
 
     # Función mutable
-    def cruzar(self, otro, seleccionados=1):
+    def cruzar(self, otro, probabilidad=1.0):
 
-        cruce = random.randint(1, len(self.cadenaG) - 1)
+        if random.random() < probabilidad:
+            cruce = random.randint(1, len(self.cadena_genetica) - 1)
+            hijo1 = otro.cadena_genetica[cruce:] + self.cadena_genetica[:cruce]
+            hijo2 = self.cadena_genetica[cruce:] + otro.cadena_genetica[:cruce]
 
-        hijo1 = otro.cadena_genetica[cruce:] + self.cadena_genetica[:cruce]
-        hijo2 = self.cadena_genetica[cruce:] + otro.cadena_genetica[:cruce]
-
-        hijo1 = limitar_seleccionados(hijo1, seleccionados)
-        hijo2 = limitar_seleccionados(hijo2, seleccionados)
+            hijo1 = Individuo(cadena_genetica=limitar_seleccionados(hijo1, self.seleccionados))
+            hijo2 = Individuo(cadena_genetica=limitar_seleccionados(hijo2, self.seleccionados))
+            
+        else:
+            hijo1 = Individuo(cadena_genetica=self.cadena_genetica.copy())
+            hijo2 = Individuo(cadena_genetica=otro.cadena_genetica.copy())
 
         return hijo1, hijo2
 
-    def mutar(self, seleccionados=1):
-        pass
+    def mutar(self, probabilidad=1.0):
+        # Aplica una mutación a partir de una probabildad dada.
+        for gen in self.cadena_genetica:
+            if random.random() < probabilidad:
+                gen = 1 - gen
+        self.cadena_genetica = limitar_seleccionados(self.cadena_genetica, self.seleccionados)
 
-    
     def generar(self):
         # Mientras que no haya el número de 1s (seleccionados) igual a
         # el número de seleccionados que necesitamos, continuamos.
@@ -270,9 +277,8 @@ class AlgoritmoAleatorio():
         self.tamano_poblacion = tamano_poblacion
 
         # Utilizamos una caché para que si ya tenemos un resultado, no volver
-        # a realizar una evaluación innecesaria. Key = cadena_genetica ,
+        # a realizar una evaluación innecesaria. Key = tupla(cadena_genetica) ,
         # Value = fitness 
-        # TODO buscar mejor clave para la caché.
         self.cache = {}
     
     def algoritmo(self):
@@ -284,45 +290,74 @@ class AlgoritmoAleatorio():
 
         # Inicializamos el mejor individuo local a nulo en cada iteración.
         mejor_individuo_local = None
-
+        while contadorOptimoLocal < 3:
         # Hacemos un bucle que dure el tamaño de la población.
-        for i in range(self.tamano_poblacion):
+            for i in range(self.tamano_poblacion):
 
-            # Generamos el individuo en el momento en vez de guardarlo en un array, así
-            # ahorramos memoria.
-            temp = Individuo(tamano=len(self.problema.candidatos), seleccionados=self.problema.num_estaciones)
+                # Generamos el individuo en el momento en vez de guardarlo en un array, así
+                # ahorramos memoria.
+                temp = Individuo(tamano=len(self.problema.candidatos), seleccionados=self.problema.num_estaciones)
 
-            # Variable fitness temporal.
-            fitness = 0
+                # Variable fitness temporal.
+                fitness = 0
 
-            # Acceso a la caché (simplifica la lectura del código).
-            acceso = "".join(map(str, temp.cadena_genetica))
+                # Acceso a la caché (simplifica la lectura del código).
+                acceso = tuple(temp.cadena_genetica)
 
-            # Si existe valor en caché, usamos ese y no evaluamos de nuevo.
-            if acceso in self.cache and self.cache[acceso] is not None:
-                fitness = self.cache[acceso]
-            else:
-                # Si no, fitness será el valor de la evaluación y la guardamos en caché.
-                temp.evaluar(self.problema)
-                fitness = temp.fitness
-                self.cache[acceso] = fitness
+                # Si existe valor en caché, usamos ese y no evaluamos de nuevo.
+                if acceso in self.cache and self.cache[acceso] is not None:
+                    fitness = self.cache[acceso]
+                else:
+                    # Si no, fitness será el valor de la evaluación y la guardamos en caché.
+                    temp.evaluar(self.problema)
+                    fitness = temp.fitness
+                    self.cache[acceso] = fitness
 
-            # Actualizamos el mejor valor.
-            if mejor_individuo_local is None:
-                mejor_individuo_local = temp
-            
-            if mejor_individuo_local.fitness < fitness:
-                mejor_individuo_local = temp
+                # Actualizamos el mejor valor.
+                if mejor_individuo_local is None:
+                    mejor_individuo_local = temp
                 
-            #     # Devolvemos el mejor individuo.
-            # if mejor_individuo is None:
-            #     mejor_individuo = mejor_individuo_local
-            # elif mejor_individuo_local.fitness > mejor_individuo.fitness:
-            #     mejor_individuo = mejor_individuo_local
-            # elif mejor_individuo_local.__eq__(mejor_individuo):
-            #     contadorOptimoLocal += 1
+                if mejor_individuo_local.fitness < fitness:
+                    mejor_individuo_local = temp
+                
+                # Devolvemos el mejor individuo.
+            if mejor_individuo is None:
+                mejor_individuo = mejor_individuo_local
+            elif mejor_individuo_local.fitness > mejor_individuo.fitness:
+                mejor_individuo = mejor_individuo_local
+                contadorOptimoLocal = 0
+            elif mejor_individuo_local.__eq__(mejor_individuo):
+                contadorOptimoLocal += 1
 
         return mejor_individuo_local
+
+
+# class AlgoritmoGenetico():
+
+#     # Se debe pasar el problema en concreto y el tamaño de la población
+#     # inicial al algoritmo.
+#     def __init__(self, problema, tamano_poblacion_inicial=100):
+#         self.problema = problema
+#         self.tamano_poblacion = tamano_poblacion_inicial
+
+#         # Utilizamos una caché para que si ya tenemos un resultado, no volver
+#         # a realizar una evaluación innecesaria. Key = tupla(cadena_genetica) ,
+#         # Value = fitness 
+#         self.cache = {}
+
+#     def algoritmo(self):
+#         poblacion = [Individuo(tamano=len(self.problema.candidatos), seleccionados=self.problema.num_estaciones)] * self.tamano_poblacion
+#         condicion_de_parada = False
+#         t = 0
+#         ind = poblacion[t]
+#         ind.evaluar()
+#         # Selección basada en rango
+#         while not condicion_de_parada:
+#             t += 1
+#             # P(t)'
+#             indp = poblacion[t]
+#             cruces = ind.cruzar(indp)
+
 
 
 # def imprimirResultado(busqueda):
