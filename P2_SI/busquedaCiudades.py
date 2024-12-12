@@ -3,6 +3,7 @@ from queue import PriorityQueue
 import random
 from geopy import distance
 from abc import ABC, abstractmethod
+from math import sqrt
 
 
 def load_data(fileName):
@@ -57,7 +58,6 @@ class Problema:
         # Encontramos el estado final y el estado inicial en el diccionario de estados
         self.calcular_acciones()
         self.calcular_estados()
-        self.calcular_candidatos()
         self.candidatos = self.data['candidates']
         self.numero_estaciones = self.data['number_stations']
     
@@ -65,7 +65,6 @@ class Problema:
     def calcular_acciones(self):
         self.acciones = {}
         self.velocidad_maxima = 0
-        self.data['segments'].sort(key= lambda a : a['destination'])
         for element in self.data['segments']:
             if element['origin'] not in self.acciones:
                 self.acciones[element['origin']] = []
@@ -73,11 +72,6 @@ class Problema:
             if element['speed'] > self.velocidad_maxima:
                 self.velocidad_maxima = element['speed']
 
-
-    def calcular_candidatos(self):
-        self.candidatosIds = []
-        for x in self.data['candidates']:
-            self.candidatosIds.append(x[0])
 
     # Diccionario de estados, id del estado, estado en el otro lado
     def calcular_estados(self):
@@ -89,8 +83,8 @@ class Heuristica():
     def __init__(self, valor):
         self.heuristica = valor
     
-    def funcion_heuristica(self, posicionActual, posicionFinal):
-        return distance.distance(posicionActual, posicionFinal).m / toMetersPerSecond(self.heuristica)
+    def funcion_heuristica(self, latitudFinal, latitudInicial, longitudFinal, longitudInicial):
+        return sqrt((abs(latitudFinal - latitudInicial)**2 + abs(longitudFinal - longitudInicial)**2)) / toMetersPerSecond(self.heuristica)
 
 class Busqueda(ABC):
 
@@ -148,9 +142,7 @@ class AE(Busqueda):
         self.heuristica = heuristica
 
     def insertar(self, nodo):
-        posicion_actual = (nodo.estado.latitud, nodo.estado.longitud)
-        posicion_final = (self.problema.estado_final.latitud, self.problema.estado_final.longitud)
-        prioridad = self.heuristica.funcion_heuristica(posicion_actual, posicion_final) + nodo.coste
+        prioridad = self.heuristica.funcion_heuristica(self.problema.estado_final.latitud, nodo.estado.latitud, self.problema.estado_final.longitud, nodo.estado.longitud) + nodo.coste
         self.frontera.put((prioridad, nodo))
 
     def sacar_siguiente(self):
@@ -158,6 +150,8 @@ class AE(Busqueda):
 
 
 class Individuo():
+
+    cache = {}
 
     def __init__(self, candidatos, tamano):
         self.seleccionados = set()
@@ -167,31 +161,33 @@ class Individuo():
     def evaluar(self, problema):
         sumPop = 0
         aux = 0
-        cache = {}
         estrella = AE(problema, Heuristica(problema.velocidad_maxima))
 
         for candidato in problema.candidatos:
             minimum = 3600*5
             for solucion in self.seleccionados:
                 tupla = (candidato[0], solucion)
-                if tupla in cache:
-                    val = cache[tupla]
+                if tupla in Individuo.cache:
+                    val = Individuo.cache[tupla]
                 else:
                     estrella.problema.estado_inicial = problema.estados[candidato[0]]
                     estrella.problema.estado_final = problema.estados[solucion]
                     estrella.start()
                     val = estrella.solucion
-                    cache[tupla] = val
+                    Individuo.cache[tupla] = val
                 minimum = min(val, minimum)
             sumPop += candidato[1]
             aux += candidato[1]*minimum
         self.fitness = (1/sumPop) * aux  
                     
     def generar(self):
-        self.seleccionados = set(random.sample(self.candidatos, self.tamano))
+        list = random.sample(self.candidatos, self.tamano)
+        self.seleccionados = set(x[0] for x in list)
 
 
 class AlgoritmoAleatorio():
+
+    cache = {}
 
     def __init__(self, problema, tamano_poblacion=100):
         self.problema = problema
@@ -199,21 +195,19 @@ class AlgoritmoAleatorio():
 
     def algoritmo(self):
         mejor_individuo = None
-        
-        cache = {}
 
         for i in range(self.tamano_poblacion):
-            temp = Individuo(self.problema.candidatosIds, self.problema.numero_estaciones)
+            temp = Individuo(self.problema.candidatos, self.problema.numero_estaciones)
             temp.generar()
 
             acceso = tuple(temp.seleccionados)
 
-            if acceso in cache:
-                fitness = cache[acceso]
+            if acceso in AlgoritmoAleatorio.cache:
+                fitness = AlgoritmoAleatorio.cache[acceso]
             else:
                 temp.evaluar(self.problema)
                 fitness = temp.fitness
-                cache[acceso] = fitness
+                AlgoritmoAleatorio.cache[acceso] = fitness
             
             if mejor_individuo is None:
                 mejor_individuo = temp
