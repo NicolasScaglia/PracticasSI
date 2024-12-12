@@ -1,5 +1,6 @@
 import json
 from queue import PriorityQueue
+import random
 from geopy import distance
 from abc import ABC, abstractmethod
 
@@ -56,6 +57,7 @@ class Problema:
         # Encontramos el estado final y el estado inicial en el diccionario de estados
         self.calcular_acciones()
         self.calcular_estados()
+        self.calcular_candidatos()
         self.candidatos = self.data['candidates']
         self.numero_estaciones = self.data['number_stations']
     
@@ -63,13 +65,19 @@ class Problema:
     def calcular_acciones(self):
         self.acciones = {}
         self.velocidad_maxima = 0
-        self.data['segments'].sort()
+        self.data['segments'].sort(key= lambda a : a['destination'])
         for element in self.data['segments']:
             if element['origin'] not in self.acciones:
-                self.acciones[element['origin']].put((element['destination'],Accion(element['origin'], element['destination'], element['distance'], element['speed'])))
+                self.acciones[element['origin']] = []
+            self.acciones[element['origin']].append(Accion(element['origin'], element['destination'], element['distance'], element['speed']))
             if element['speed'] > self.velocidad_maxima:
                 self.velocidad_maxima = element['speed']
 
+
+    def calcular_candidatos(self):
+        self.candidatosIds = []
+        for x in self.data['candidates']:
+            self.candidatosIds.append(x[0])
 
     # Diccionario de estados, id del estado, estado en el otro lado
     def calcular_estados(self):
@@ -96,12 +104,11 @@ class Busqueda(ABC):
         
     def algoritmo(self):
         self.cerrados = set()
-        nodoInicial = Nodo(self.problema.estadoInicial, None, None)
+        nodoInicial = Nodo(self.problema.estado_inicial, None, None)
         self.insertar(nodoInicial)
         while(True):
             if self.es_vacia():
-                self.nodoActual.coste = 3600*5
-                return self.nodoActual.coste
+                return 3600*5
             self.nodoActual = self.sacar_siguiente()
             if self.es_final():
                 return self.nodoActual.coste
@@ -121,7 +128,7 @@ class Busqueda(ABC):
         pass    
 
     def es_final(self):
-        return self.nodoActual.estado == self.problema.estadoFinal
+        return self.nodoActual.estado == self.problema.estado_final
 
     def abrir_nodo(self):
         if self.nodoActual.estado.identificador in self.problema.acciones:
@@ -132,7 +139,7 @@ class Busqueda(ABC):
             accion = element
             nodoFrontera = Nodo(self.problema.estados[accion.destino], self.nodoActual, accion)
             self.insertar(nodoFrontera)
-            
+
 class AE(Busqueda):
 
     def __init__(self, problema, heuristica):
@@ -142,11 +149,83 @@ class AE(Busqueda):
 
     def insertar(self, nodo):
         posicion_actual = (nodo.estado.latitud, nodo.estado.longitud)
-        prioridad = self.heuristica.funcion_heuristica_geodesica(posicion_actual, self.problema.posicionFinal) + nodo.coste
+        posicion_final = (self.problema.estado_final.latitud, self.problema.estado_final.longitud)
+        prioridad = self.heuristica.funcion_heuristica(posicion_actual, posicion_final) + nodo.coste
         self.frontera.put((prioridad, nodo))
 
     def sacar_siguiente(self):
         return self.frontera.get()[1]
+
+
+class Individuo():
+
+    def __init__(self, candidatos, tamano):
+        self.seleccionados = set()
+        self.candidatos = candidatos
+        self.tamano = tamano
+
+    def evaluar(self, problema):
+        sumPop = 0
+        aux = 0
+        cache = {}
+        estrella = AE(problema, Heuristica(problema.velocidad_maxima))
+
+        for candidato in problema.candidatos:
+            minimum = 3600*5
+            for solucion in self.seleccionados:
+                tupla = (candidato[0], solucion)
+                if tupla in cache:
+                    val = cache[tupla]
+                else:
+                    estrella.problema.estado_inicial = problema.estados[candidato[0]]
+                    estrella.problema.estado_final = problema.estados[solucion]
+                    estrella.start()
+                    val = estrella.solucion
+                    cache[tupla] = val
+                minimum = min(val, minimum)
+            sumPop += candidato[1]
+            aux += candidato[1]*minimum
+        self.fitness = (1/sumPop) * aux  
+                    
+    def generar(self):
+        self.seleccionados = set(random.sample(self.candidatos, self.tamano))
+
+
+class AlgoritmoAleatorio():
+
+    def __init__(self, problema, tamano_poblacion=100):
+        self.problema = problema
+        self.tamano_poblacion = tamano_poblacion
+
+    def algoritmo(self):
+        mejor_individuo = None
+        
+        cache = {}
+
+        for i in range(self.tamano_poblacion):
+            temp = Individuo(self.problema.candidatosIds, self.problema.numero_estaciones)
+            temp.generar()
+
+            acceso = tuple(temp.seleccionados)
+
+            if acceso in cache:
+                fitness = cache[acceso]
+            else:
+                temp.evaluar(self.problema)
+                fitness = temp.fitness
+                cache[acceso] = fitness
+            
+            if mejor_individuo is None:
+                mejor_individuo = temp
+            
+            if mejor_individuo.fitness > fitness:
+                mejor_individuo = temp
+
+        return mejor_individuo
+
+
+            
+
 
 # def imprimirResultado(busqueda):
 #     print(f"Nodos generados: {busqueda.generados}")
@@ -169,11 +248,16 @@ class AE(Busqueda):
 #     print(f"Longitud de la solucion: {len(ids)}")
 #     print(f"Camino recorrido: {ids}")
 
+
+
+
 def toMetersPerSecond(kilometersPerHour):
     return (kilometersPerHour * 1000) / 3600
 
 def main():
-    prob = Problema("sample-problems-lab2/toy/calle_del_virrey_morcillo_albacete_250_3_candidates_15_ns_4.json")
+    prob = Problema("P2_SI/sample-problems-lab2/toy/calle_del_virrey_morcillo_albacete_250_3_candidates_15_ns_4.json")
+    AA = AlgoritmoAleatorio(prob)
+    print(AA.algoritmo().seleccionados)
 
 if __name__ == "__main__":
     main()
