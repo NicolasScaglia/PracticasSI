@@ -153,10 +153,13 @@ class Individuo():
 
     cache = {}
 
-    def __init__(self, candidatos, tamano):
-        self.seleccionados = set()
-        self.candidatos = candidatos
-        self.tamano = tamano
+    def __init__(self, seleccionados=None, candidatos=[], tamano=0):
+        if seleccionados is None:
+            self.seleccionados = set()
+            self.candidatos = candidatos
+            self.tamano = tamano
+        else:
+            self.seleccionados = set(seleccionados)
 
     def evaluar(self, problema):
         sumPop = 0
@@ -179,7 +182,36 @@ class Individuo():
             sumPop += candidato[1]
             aux += candidato[1]*minimum
         self.fitness = (1/sumPop) * aux  
+
+    def cruzar(self, otro, probabilidad=1.0):
+
+        if random.random() < probabilidad:
+            corte = random.randint(1, len(self.seleccionados) - 1)
+            piscina_genetica = self.seleccionados + otro.seleccionados
+            hijo1 = set(self.seleccionados[corte:] + otro.seleccionados[:corte])
+            hijo2 = set(otro.seleccionados[corte:] + self.seleccionados[:corte])
+            if len(hijo1) < len(self.seleccionados):
+                faltantes = len(self.seleccionados) - len(hijo1)
+                hijo1.add(x for x in random.sample(piscina_genetica - hijo1, faltantes))
+            if len(hijo2) < len(self.seleccionados):
+                faltantes = len(self.seleccionados) - len(hijo2)
+                hijo1.add(x for x in random.sample(piscina_genetica - hijo2, faltantes))
+        else:
+            hijo1 = self.seleccionados
+            hijo2 = otro.seleccionados
+
+        return (hijo1, hijo2)
                     
+    def mutar(self, probabilidad=1.0):
+        # Aplica una mutación a partir de una probabildad dada.
+        for i in range(len(self.seleccionados)):
+            if random.random() < probabilidad:
+                nuevo = random.choice(self.candidatos)[0]
+                while nuevo in self.seleccionados:
+                    nuevo = random.choice(self.candidatos)[0]
+                self.seleccionados.remove(random.choice(self.seleccionados))
+                self.seleccionados.add(nuevo)
+    
     def generar(self):
         list = random.sample(self.candidatos, self.tamano)
         self.seleccionados = set(x[0] for x in list)
@@ -197,7 +229,7 @@ class AlgoritmoAleatorio():
         mejor_individuo = None
 
         for i in range(self.tamano_poblacion):
-            temp = Individuo(self.problema.candidatos, self.problema.numero_estaciones)
+            temp = Individuo(candidatos=self.problema.candidatos, tamano=self.problema.numero_estaciones)
             temp.generar()
 
             acceso = tuple(temp.seleccionados)
