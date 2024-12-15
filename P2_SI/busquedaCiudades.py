@@ -260,10 +260,12 @@ class AlgoritmoGenetico:
 
     cache = {}
 
-    def __init__(self, problema, tamano_poblacion=100, generaciones=50):
+    def __init__(self, problema, tamano_poblacion=100, generaciones=50, probabilidad_cruce=0.777, probabilidad_mutacion=0.777):
         self.problema = problema
         self.tamano_poblacion = tamano_poblacion
         self.generaciones = generaciones
+        self.probabilidad_cruce = probabilidad_cruce
+        self.probabilidad_mutacion = probabilidad_mutacion
 
     def seleccionar_rango(self, poblacion):
 
@@ -319,7 +321,7 @@ class AlgoritmoGenetico:
         while not condicion_de_parada:
             numero_de_generaciones += 1
             # poblacion_auxiliar = self.seleccionar_torneo(poblacion, random.randint(1, self.tamano_poblacion))
-            poblacion_auxiliar = self.seleccionar_rango(poblacion)
+            poblacion_auxiliar = self.seleccionar_torneo(poblacion, random.randint(2, len(poblacion)))
 
             nueva_poblacion = []
 
@@ -327,12 +329,12 @@ class AlgoritmoGenetico:
             for i in range(0, len(poblacion_auxiliar), 2):
                 if i + 1 < len(poblacion_auxiliar):
                     
-                    hijos = poblacion_auxiliar[i].cruzar(poblacion_auxiliar[i+1], probabilidad=2 * (N - i + 1) / (N**2 + N))
+                    hijos = poblacion_auxiliar[i].cruzar(poblacion_auxiliar[i+1], probabilidad=self.probabilidad_cruce)
                     hijo1 = hijos[0]
                     hijo2 = hijos[1]
 
-                    hijo1.mutar()
-                    hijo2.mutar()
+                    hijo1.mutar(self.probabilidad_mutacion)
+                    hijo2.mutar(self.probabilidad_mutacion)
 
                     acceso1 = hijo1.seleccionados
                     if acceso1 in AlgoritmoGenetico.cache:
@@ -413,10 +415,10 @@ def toMetersPerSecond(kilometersPerHour):
     return (kilometersPerHour * 1000) / 3600
 
 def main():
-    prob = Problema("sample-problems-lab2/huge/plaza_santa_teresa_de_jesús_jornet_albacete_2000_4_candidates_433_ns_46.json")
-    AA = AlgoritmoAleatorio(prob)
-    print(AA.algoritmo().seleccionados)
-    print("-------------------------------------------------------------------")
+    prob = Problema("P2_SI/sample-problems-lab2/medium/calle_iÌnsula_barataria_albacete_500_0_candidates_140_ns_34.json")
+    # AA = AlgoritmoAleatorio(prob)
+    # print(AA.algoritmo().seleccionados)
+    # print("-------------------------------------------------------------------")
     AG = AlgoritmoGenetico(prob, 100)
     print(f"Solución: {AG.algoritmo().seleccionados}")
 
